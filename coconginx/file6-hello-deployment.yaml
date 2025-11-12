@@ -1,28 +1,30 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hello-enclave-deployment
+  name: nginx-enclave-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: hello-enclave
+      app: nginx-enclave
   template:
     metadata:
       labels:
-        app: hello-enclave
+        app: nginx-enclave
     spec:
       containers:
-      - name: hello-container
-        image: nerdysrisha/hello-aws-nitro:latest
+      - name: nginx-container
+        image: nerdysrisha/nginx-nitro-enclave:latest
         resources:
           limits:
             aws.ec2.nitro/nitro_enclaves: "1"
-            hugepages-2Mi: 768Mi
-            cpu: 250m
+            hugepages-2Mi: 512Mi  # Reduced from 768Mi for nginx
+            cpu: 500m             # Increased CPU for nginx
+            memory: 1Gi           # Added memory limit
           requests:
             aws.ec2.nitro/nitro_enclaves: "1"
-            hugepages-2Mi: 768Mi
+            hugepages-2Mi: 512Mi
+            memory: 512Mi
         volumeMounts:
         - mountPath: /dev/hugepages
           name: hugepage
