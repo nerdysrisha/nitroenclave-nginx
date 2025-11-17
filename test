@@ -1,3 +1,10 @@
+MAKE A COPY OF EXISTING FILES AND REPLACE BELOW FILES AND START FROM SCRATCH 
+
+SUPER IMPORTANT TO HAVE A COPY OF EXISTING FILE..
+
+
+
+
 1. GitHub Application Dockerfile (nginx inside enclave)
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
