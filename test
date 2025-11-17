@@ -3,22 +3,30 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
 # Install nginx and socat for vsock communication
-RUN dnf update -y && dnf install -y nginx socat
+RUN dnf update -y && dnf install -y nginx socat nc
 
-# Create a simple nginx configuration that listens on vsock port 5000
-RUN echo "Hello from NGINX in Enclave via VSOCK!" > /usr/share/nginx/html/index.html && \
-    # Configure nginx to listen on vsock port 5000 instead of TCP
-    echo 'server { listen 5000 vsock; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/vsock.conf && \
-    # Disable default TCP listener
-    echo '' > /etc/nginx/conf.d/default.conf
+# Create a simple nginx configuration (listens on standard TCP port 8080 inside enclave)
+RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/index.html && \
+    # Configure nginx to listen on TCP port 8080 inside the enclave
+    echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
+    # Disable the default port 80 listener to avoid conflict
+    sed -i 's/listen.*80;/# listen 80;/' /etc/nginx/nginx.conf
 
-# Create startup script that starts nginx and vsock health check
-RUN echo '#!/bin/bash\nnginx -g "daemon off;" &\n# Simple health check endpoint\nwhile true; do echo "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK" | nc -l -p 5001 -s 0.0.0.0; done &\nwait' > /start.sh && \
+# Create startup script that:
+# 1. Starts nginx on TCP port 8080 inside enclave
+# 2. Starts VSOCK proxy that bridges VSOCK:5000 → TCP:8080
+RUN echo '#!/bin/bash\n\
+# Start nginx on port 8080 inside enclave\n\
+nginx -g "daemon off;" &\n\
+# Start VSOCK proxy: external VSOCK connections on port 5000 get forwarded to nginx on TCP 8080\n\
+socat VSOCK-LISTEN:5000,fork TCP:localhost:8080 &\n\
+# Health check endpoint on VSOCK port 5001\n\
+while true; do echo "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK" | nc -l -p 5001 -s 0.0.0.0; done &\n\
+wait' > /start.sh && \
     chmod +x /start.sh
 
 # Run the startup script
 CMD ["/start.sh"]
-
 
 ------------------------------------------------
 
@@ -98,13 +106,15 @@ get_enclave_cid() {
 }
 
 # Function to start vsock proxy
+# Function to start vsock proxy
 start_vsock_proxy() {
     local enclave_cid=$1
     echo "Starting VSOCK proxy for enclave CID: $enclave_cid"
-    # Bridge TCP port 80 to VSOCK port 5000 on the enclave
-    socat TCP-LISTEN:80,fork VSOCK-CONNECT:$enclave_cid:5000 &
+    # Bridge TCP port 80 (external) to VSOCK port 5000 (enclave internal)
+    # External clients connect to TCP:80 → Proxy forwards to VSOCK:5000 → Enclave forwards to TCP:8080 → Nginx
+    socat TCP-LISTEN:80,fork,reuseaddr VSOCK-CONNECT:$enclave_cid:5000 &
     echo $! > /var/run/vsock-proxy.pid
-    echo "VSOCK proxy started on port 80"
+    echo "VSOCK proxy started: TCP:80 -> VSOCK:$enclave_cid:5000"
 }
 
 main() {
