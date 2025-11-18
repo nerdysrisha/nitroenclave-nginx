@@ -8,11 +8,11 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Conta
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i 's/listen.*80;/# listen 80;/' /etc/nginx/nginx.conf
 
-# Create SIMPLE startup script - just run nginx
-RUN printf '#!/bin/bash\n\necho "=== Starting nginx inside enclave === "\nnginx -g "daemon off;"\n' > /start.sh && \
+# Create startup script with nginx + VSOCK proxy
+RUN printf '#!/bin/bash\n\necho "=== Starting nginx and VSOCK proxy inside enclave === "\nnginx -g "daemon off;" &\necho "Nginx started on port 8080"\nsocat VSOCK-LISTEN:5000,fork TCP:localhost:8080 &\necho "VSOCK proxy started on port 5000"\nwait\n' > /start.sh && \
     chmod +x /start.sh
 
 # DEBUG: Verify nginx config
-RUN nginx -t && echo "Nginx configuration is valid"
+RUN nginx -t && echo "✅ Nginx configuration is valid"
 
 CMD ["/start.sh"]
