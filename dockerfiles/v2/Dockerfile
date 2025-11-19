@@ -7,7 +7,7 @@ RUN yum update -y && yum install -y nginx socat nc curl iproute procps-ng && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     (test -f /etc/nginx/nginx.conf || echo 'events { worker_connections 1024; } http { include /etc/nginx/conf.d/*.conf; }' > /etc/nginx/nginx.conf)
 
-# Single RUN command for script creation with proper heredoc
+# Single RUN command for script creation with proper heredoc (NO INDENTATION)
 RUN cat > /start.sh << 'EOF'
 #!/bin/bash
 set -x
