@@ -52,7 +52,6 @@ RUN echo 'wait' >> /start.sh
 
 RUN chmod +x /start.sh
 
-# DEBUG: Verify nginx config
-RUN nginx -t && echo "✅ Nginx configuration is valid"
+# REMOVE THIS LINE: RUN nginx -t && echo "✅ Nginx configuration is valid"
 
 CMD ["/start.sh"]
