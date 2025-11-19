@@ -7,8 +7,9 @@ RUN yum update -y && yum install -y nginx socat nc curl iproute procps-ng && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     (test -f /etc/nginx/nginx.conf || echo 'events { worker_connections 1024; } http { include /etc/nginx/conf.d/*.conf; }' > /etc/nginx/nginx.conf)
 
-# Single RUN command for script creation
-RUN echo '#!/bin/bash
+# Single RUN command for script creation with proper heredoc
+RUN cat > /start.sh << 'EOF'
+#!/bin/bash
 set -x
 echo "=== Starting nginx and VSOCK proxy inside enclave ==="
 echo "Timestamp: $(date)"
@@ -38,6 +39,9 @@ echo "=== Final system state ==="
 ss -tlnp
 echo "=== Startup complete - waiting for connections ==="
 echo "Nginx PID: $NGINX_PID, VSOCK PID: $VSOCK_PID"
-wait' > /start.sh && chmod +x /start.sh
+wait
+EOF
+
+RUN chmod +x /start.sh
 
 CMD ["/start.sh"]
