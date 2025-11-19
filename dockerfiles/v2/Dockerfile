@@ -1,7 +1,11 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
-# Install nginx, socat, and debugging tools
-RUN dnf update -y && dnf install -y nginx socat nc curl iproute procps-ng
+# Install nginx, socat, and debugging tools (fix curl conflict)
+RUN dnf update -y && dnf install -y nginx socat nc iproute procps-ng --allowerasing
+
+# Remove curl from install list since curl-minimal is already installed
+# OR use this alternative if above fails:
+# RUN dnf update -y && dnf remove -y curl-minimal && dnf install -y nginx socat nc curl iproute procps-ng
 
 # Create a simple nginx configuration
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
