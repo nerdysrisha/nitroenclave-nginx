@@ -3,12 +3,17 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2
 # Install nginx, socat, and debugging tools
 RUN yum update -y && yum install -y nginx socat nc curl iproute procps-ng
 
-# Create nginx configuration in ONE step after installation
-RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
-    echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
-    sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
+# Wait for nginx install to complete and directories to be created
+RUN sleep 2
 
-# Create startup script in multiple steps to avoid syntax errors
+# Simple nginx config - ONLY port 8080
+RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
+    echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf
+
+# Remove any default configs that might use port 80
+RUN rm -f /etc/nginx/conf.d/default.conf.backup /etc/nginx/conf.d/example_ssl.conf 2>/dev/null || true
+
+# Create startup script with all debugging but simple port setup
 RUN echo '#!/bin/bash' > /start.sh
 RUN echo 'set -x' >> /start.sh
 RUN echo 'echo "=== Starting nginx and VSOCK proxy inside enclave ==="' >> /start.sh
@@ -17,8 +22,6 @@ RUN echo 'echo "=== Pre-start system info ==="' >> /start.sh
 RUN echo 'echo "Hostname: $(hostname)"' >> /start.sh
 RUN echo 'echo "IP addresses:"' >> /start.sh
 RUN echo 'ip addr show' >> /start.sh
-RUN echo 'echo "Initial listening ports:"' >> /start.sh
-RUN echo 'ss -tlnp' >> /start.sh
 RUN echo 'echo "=== Bringing up loopback interface ==="' >> /start.sh
 RUN echo 'ip link set lo up' >> /start.sh
 RUN echo 'echo "Loopback status:"' >> /start.sh
@@ -29,21 +32,17 @@ RUN echo 'echo "=== Starting nginx ==="' >> /start.sh
 RUN echo 'nginx -g "daemon off;" &' >> /start.sh
 RUN echo 'NGINX_PID=$!' >> /start.sh
 RUN echo 'echo "Nginx PID: $NGINX_PID"' >> /start.sh
-RUN echo 'echo "Nginx started on port 8080"' >> /start.sh
 RUN echo 'sleep 3' >> /start.sh
 RUN echo 'echo "=== Post-nginx start debugging ==="' >> /start.sh
-RUN echo 'echo "Listening ports after nginx start:"' >> /start.sh
+RUN echo 'echo "Listening ports:"' >> /start.sh
 RUN echo 'ss -tlnp' >> /start.sh
 RUN echo 'echo "=== Testing local nginx connectivity ==="' >> /start.sh
 RUN echo 'echo "Testing 127.0.0.1:8080:"' >> /start.sh
 RUN echo 'curl -v --connect-timeout 5 http://127.0.0.1:8080/ 2>&1 || echo "127.0.0.1:8080 failed"' >> /start.sh
-RUN echo 'echo "Testing localhost:8080:"' >> /start.sh
-RUN echo 'curl -v --connect-timeout 5 http://localhost:8080/ 2>&1 || echo "localhost:8080 failed"' >> /start.sh
 RUN echo 'echo "=== Starting VSOCK proxy ==="' >> /start.sh
 RUN echo 'socat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &' >> /start.sh
 RUN echo 'VSOCK_PID=$!' >> /start.sh
 RUN echo 'echo "VSOCK proxy PID: $VSOCK_PID"' >> /start.sh
-RUN echo 'echo "VSOCK proxy started on port 5000"' >> /start.sh
 RUN echo 'echo "=== Final system state ==="' >> /start.sh
 RUN echo 'echo "All listening ports:"' >> /start.sh
 RUN echo 'ss -tlnp' >> /start.sh
@@ -54,6 +53,6 @@ RUN echo 'wait' >> /start.sh
 RUN chmod +x /start.sh
 
 # DEBUG: Verify nginx config
-RUN nginx -t && echo "Nginx configuration is valid"
+RUN nginx -t && echo "✅ Nginx configuration is valid"
 
 CMD ["/start.sh"]
