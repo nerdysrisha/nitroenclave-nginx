@@ -3,11 +3,7 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2
 # Install nginx, socat, and debugging tools
 RUN yum update -y && yum install -y nginx socat nc curl iproute procps-ng
 
-# Create nginx directories first, then create configuration
-RUN mkdir -p /usr/share/nginx/html && \
-    mkdir -p /etc/nginx/conf.d
-
-# Create a simple nginx configuration
+# Create nginx configuration in ONE step after installation
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
