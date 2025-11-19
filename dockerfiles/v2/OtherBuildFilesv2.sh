@@ -1,3 +1,80 @@
+#Deployment.yaml 
+###Parent Container 
+###Enclave Manifest
+####Run.sh
+#####NGINX Remote Github Docker file 
+
+
+
+##############################################################################################################################################################
+#Deployment.yaml 
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-enclave-deployment
+  namespace: integrations
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-enclave
+  template:
+    metadata:
+      labels:
+        app: nginx-enclave
+    spec:
+      containers:
+      - name: nginx-container
+        image: nerdysrisha/nginx-aws-nitro:latest
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 80
+        resources:
+          limits:
+            aws.ec2.nitro/nitro_enclaves: 1
+            hugepages-2Mi: 2048Mi
+            cpu: 1000m
+            memory: 2Gi
+          requests:
+            aws.ec2.nitro/nitro_enclaves: 1
+            hugepages-2Mi: 2048Mi
+            cpu: 1000m
+            memory: 2Gi
+        volumeMounts:
+        - mountPath: /dev/hugepages
+          name: hugepage
+          readOnly: false
+        - mountPath: /dev/vsock
+          name: vsock-device
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+              - SYS_ADMIN
+              - NET_ADMIN
+      volumes:
+      - name: hugepage
+        emptyDir:
+          medium: HugePages-2Mi
+      - name: vsock-device
+        hostPath:
+          path: /dev/vsock
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      - key: aws.ec2.nitro/nitro_enclaves
+        operator: Exists
+        effect: NoSchedule
+
+
+
+
+##############################################################################################################################################################
+
 ###Parent Container 
 
 # Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -104,6 +181,8 @@ CMD ["/home/run.sh"]
 
 
 
+##############################################################################################################################################################
+
 ###Enclave Manifest
 
 {
@@ -132,6 +211,8 @@ CMD ["/home/run.sh"]
 
 
 
+
+##############################################################################################################################################################
 ####Run.sh
 
 #!/bin/bash -e
@@ -200,6 +281,10 @@ main() {
 main
 
 
+
+
+
+##############################################################################################################################################################
 #####NGINX Remote Github Docker file 
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
