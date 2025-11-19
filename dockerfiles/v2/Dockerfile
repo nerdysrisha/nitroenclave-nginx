@@ -3,15 +3,15 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2
 # Install nginx, socat, and debugging tools
 RUN yum update -y && yum install -y nginx socat nc curl iproute procps-ng
 
-# Wait for nginx install to complete and directories to be created
-RUN sleep 2
+# FORCE CREATE nginx directories since the package doesn't create them
+RUN mkdir -p /usr/share/nginx/html /etc/nginx/conf.d /var/log/nginx /var/cache/nginx
 
 # Simple nginx config - ONLY port 8080
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf
 
-# Remove any default configs that might use port 80
-RUN rm -f /etc/nginx/conf.d/default.conf.backup /etc/nginx/conf.d/example_ssl.conf 2>/dev/null || true
+# Create basic nginx.conf if it doesn't exist
+RUN test -f /etc/nginx/nginx.conf || echo 'events { worker_connections 1024; } http { include /etc/nginx/conf.d/*.conf; }' > /etc/nginx/nginx.conf
 
 # Create startup script with all debugging but simple port setup
 RUN echo '#!/bin/bash' > /start.sh
