@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-enclave-deployment
+  namespace: integrations
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-enclave
+  template:
+    metadata:
+      labels:
+        app: nginx-enclave
+    spec:
+      containers:
+      - name: nginx-container
+        image: nerdysrisha/nginx-aws-nitro:latest
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 80  # ADDED: Expose TCP port 80 for vsock proxy
+        resources:
+          limits:
+            aws.ec2.nitro/nitro_enclaves: "1"
+            hugepages-2Mi: 2048Mi
+            cpu: 500m
+            memory: 2Gi
+          requests:
+            aws.ec2.nitro/nitro_enclaves: "1"
+            hugepages-2Mi: 2048Mi
+            memory: 2Gi
+        # ADDED: Liveness and readiness probes for vsock proxy
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - mountPath: /dev/hugepages
+          name: hugepage
+          readOnly: false
+        securityContext:
+          privileged: true
+      volumes:
+      - name: hugepage
+        emptyDir:
+          medium: HugePages-2Mi
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      - key: aws.ec2.nitro/nitro_enclaves
+        operator: Exists
+        effect: NoSchedule
