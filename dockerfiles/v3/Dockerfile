@@ -3,6 +3,11 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 # Install nginx, socat, and debugging tools
 RUN dnf update -y && dnf install -y nginx socat nc iproute procps-ng --allowerasing
 
+# Add Python for attestation testing
+RUN dnf install -y python3 python3-pip && \
+    pip3 install boto3
+
+    
 # Create nginx configuration
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
