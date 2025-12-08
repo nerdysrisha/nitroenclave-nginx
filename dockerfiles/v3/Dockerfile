@@ -9,7 +9,7 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Conta
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
-COPY container/scripts/test_attestation.sh /test_attestation.sh
+COPY test_attestation.sh /test_attestation.sh
 RUN chmod +x /test_attestation.sh
 
 # Create startup script with extensive debugging
