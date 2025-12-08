@@ -1,9 +1,12 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
-RUN dnf update -y && dnf install -y nginx socat python3 python3-pip awscli --allowerasing
-RUN pip3 install boto3
-RUN mkdir -p /dev /proc /sys /tmp /run /var/run
-RUN echo "Hello from NGINX for coco enclaves" > /usr/share/nginx/html/index.html
-RUN echo 'server { listen 8080; }' > /etc/nginx/conf.d/default.conf
-CMD ["sh", "-c", "ip link set lo up && nginx -g 'daemon off;' & socat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 & wait"]
 
- 
+RUN dnf update -y && dnf install -y nginx socat nc iproute procps-ng --allowerasing
+
+RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
+    echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
+    sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
+
+RUN printf '#!/bin/bash\n\nip link set lo up\nnginx -g "daemon off;" &\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nwait\n' > /start.sh && \
+    chmod +x /start.sh
+
+CMD ["/start.sh"]
