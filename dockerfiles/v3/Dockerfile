@@ -54,4 +54,8 @@ RUN printf '#!/bin/bash\n\nset -x\necho "=== Starting nginx and VSOCK proxy insi
 RUN nginx -t && echo "✅ Nginx configuration is valid"
 RUN echo "=== Startup script content ===" && cat /start.sh
 
-CMD ["/start.sh"]
+# Add this line BEFORE the CMD line:
+RUN mkdir -p /dev /proc /sys /tmp /run /var/run
+
+#  simplify the CMD to bare minimum:
+CMD ["sh", "-c", "nginx -g 'daemon off;' & socat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 & wait"]
