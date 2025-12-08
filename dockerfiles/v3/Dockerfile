@@ -1,8 +1,14 @@
 #This is main application dockerfile. Here we are using nginx as application
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
-# Install nginx, socat, and debugging tools (fix curl conflict)
-RUN dnf update -y && dnf install -y nginx socat nc iproute procps-ng --allowerasing
+ 
+# ADDED: python3, pip, awscli for KMS attestation
+RUN dnf update -y && dnf install -y nginx socat nc iproute procps-ng python3 python3-pip awscli --allowerasing
+RUN pip3 install boto3
+
+# Create essential directories for LinuxKit/Nitro
+RUN mkdir -p /dev /proc /sys /tmp /run /var/run
+
 
 # Create a simple nginx configuration
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
