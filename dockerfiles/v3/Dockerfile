@@ -1,6 +1,14 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
-RUN dnf update -y && dnf install -y nginx socat nc iproute procps-ng --allowerasing
+#RUN dnf update -y && dnf install -y nginx socat nc iproute procps-ng --allowerasing
+
+
+
+# ADD python3, pip, awscli
+RUN dnf update -y && dnf install -y nginx socat nc iproute procps-ng python3 python3-pip awscli --allowerasing
+RUN pip3 install boto3  # ADD THIS LINE
+
+
 
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Containers" > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
