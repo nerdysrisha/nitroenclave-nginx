@@ -21,7 +21,11 @@ RUN printf '#!/bin/bash\necho "=== Testing KMS Attestation === "\ncd /tmp\necho 
 
     
 # Main startup script - NO ATTESTATION
-RUN printf '#!/bin/bash\nip link set lo up\nnginx -g "daemon off;" &\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nwait\n' > /start.sh && \
+#RUN printf '#!/bin/bash\nip link set lo up\nnginx -g "daemon off;" &\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nwait\n' > /start.sh && \
+   # chmod +x /start.sh
+
+# Main startup script - ADD ATTESTATION CALL
+RUN printf '#!/bin/bash\n/test_attestation.sh\nip link set lo up\nnginx -g "daemon off;" &\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nwait\n' > /start.sh && \
     chmod +x /start.sh
 
 CMD ["/start.sh"]
