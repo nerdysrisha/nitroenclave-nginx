@@ -14,19 +14,19 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Conta
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
 # Copy attestation script (external file)
-COPY test_attestation.sh /test_attestation.sh
-RUN chmod +x /test_attestation.sh
+COPY test_attestation.sh /opt/test_attestation.sh
+RUN chmod +x /opt/test_attestation.sh
 
 
 # DEBUG: Verify the file was copied
 RUN echo "=== DEBUG: Checking if attestation file exists ===" && \
-    ls -la /test_attestation.sh && \
+    ls -la /opt/test_attestation.sh && \
     echo "=== DEBUG: File contents ===" && \
-    cat /test_attestation.sh && \
+    cat /opt/test_attestation.sh && \
     echo "=== DEBUG: File verification complete ==="
 
 # Create lean startup script with debug
-RUN printf '#!/bin/bash\n\necho "=== STARTUP DEBUG: Starting container ==="\necho "=== DEBUG: Checking attestation file before execution ==="\nls -la /test_attestation.sh\necho "=== DEBUG: Running attestation test ==="\n/test_attestation.sh\necho "=== DEBUG: Attestation test completed, exit code: $? ==="\n\n# Bring up loopback\nip link set lo up\n\n# Start nginx\nnginx -g "daemon off;" &\nNGINX_PID=$!\n\n# Start VSOCK proxy\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nVSOCK_PID=$!\n\n# Wait for both\nwait\n' > /start.sh && \
+RUN printf '#!/bin/bash\n\necho "=== STARTUP DEBUG: Starting container ==="\necho "=== DEBUG: Checking attestation file before execution ==="\nls -la /opt/test_attestation.sh\necho "=== DEBUG: Running attestation test ==="\n/opt/test_attestation.sh\necho "=== DEBUG: Attestation test completed, exit code: $? ==="\n\n# Bring up loopback\nip link set lo up\n\n# Start nginx\nnginx -g "daemon off;" &\nNGINX_PID=$!\n\n# Start VSOCK proxy\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nVSOCK_PID=$!\n\n# Wait for both\nwait\n' > /start.sh && \
     chmod +x /start.sh
 
 
