@@ -1,8 +1,10 @@
 #!/bin/bash
 echo "=== Testing KMS Attestation ==="
 
-# Set AWS region
-export AWS_DEFAULT_REGION=us-east-1
+# Debug: Show environment variables
+echo "AWS_ROLE_ARN: $AWS_ROLE_ARN"
+echo "AWS_WEB_IDENTITY_TOKEN_FILE: $AWS_WEB_IDENTITY_TOKEN_FILE"
+echo "AWS_REGION: $AWS_REGION"
 
 cd /tmp
 echo "Secret-$(date +%s)" > secret.txt
@@ -11,11 +13,14 @@ python3 - << 'PYEOF'
 import boto3
 import os
 
-# Set region explicitly
-os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+# Print environment for debugging
+print(f"AWS_ROLE_ARN: {os.environ.get('AWS_ROLE_ARN')}")
+print(f"AWS_WEB_IDENTITY_TOKEN_FILE: {os.environ.get('AWS_WEB_IDENTITY_TOKEN_FILE')}")
+print(f"AWS_REGION: {os.environ.get('AWS_REGION')}")
 
 try:
-    kms = boto3.client("kms", region_name='us-east-1')
+    # Let boto3 automatically use the environment variables
+    kms = boto3.client("kms", region_name='eu-west-1')  # Use eu-west-1 not us-east-1!
     
     with open("secret.txt", "rb") as f:
         ciphertext = kms.encrypt(
