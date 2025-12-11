@@ -18,12 +18,13 @@ COPY test_attestation.sh /opt/test_attestation.sh
 RUN chmod +x /opt/test_attestation.sh
 
 
-# DEBUG: Verify the file was copied
-RUN echo "=== DEBUG: Checking if attestation file exists ===" && \
-    ls -la /opt/test_attestation.sh && \
-    echo "=== DEBUG: File contents ===" && \
-    cat /opt/test_attestation.sh && \
-    echo "=== DEBUG: File verification complete ==="
+# DEBUG: Verify the file was copied - FORCE OUTPUT
+RUN echo "=== DEBUG: Checking if attestation file exists ===" 2>&1 && \
+    ls -la /opt/test_attestation.sh 2>&1 && \
+    echo "=== DEBUG: File contents ===" 2>&1 && \
+    cat /opt/test_attestation.sh 2>&1 && \
+    echo "=== DEBUG: File verification complete ===" 2>&1
+
 
 # Create lean startup script with debug
 RUN printf '#!/bin/bash\n\necho "=== STARTUP DEBUG: Starting container ==="\necho "=== DEBUG: Checking attestation file before execution ==="\nls -la /opt/test_attestation.sh\necho "=== DEBUG: Running attestation test ==="\n/opt/test_attestation.sh\necho "=== DEBUG: Attestation test completed, exit code: $? ==="\n\n# Bring up loopback\nip link set lo up\n\n# Start nginx\nnginx -g "daemon off;" &\nNGINX_PID=$!\n\n# Start VSOCK proxy\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nVSOCK_PID=$!\n\n# Wait for both\nwait\n' > /start.sh && \
