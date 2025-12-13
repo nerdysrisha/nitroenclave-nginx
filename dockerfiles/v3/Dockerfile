@@ -21,7 +21,6 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Conta
 RUN cat > /opt/credentials_server.py << 'EOF'
 from flask import Flask, request, jsonify
 import os
-
 app = Flask(__name__)
 
 @app.route('/set-credentials', methods=['POST'])
