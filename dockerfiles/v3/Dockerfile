@@ -26,18 +26,19 @@ app = Flask(__name__)
 
 @app.route('/set-credentials', methods=['POST'])
 def set_credentials():
-    try:
-        data = request.get_json()
-        os.environ['AWS_ACCESS_KEY_ID'] = data.get('aws_access_key_id', '')
-        os.environ['AWS_SECRET_ACCESS_KEY'] = data.get('aws_secret_access_key', '')
-        os.environ['AWS_SESSION_TOKEN'] = data.get('aws_session_token', '')
-        return jsonify({"status": "success"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+    data = request.get_json()
+    
+    # Set environment variables for AWS SDK
+    os.environ['AWS_ACCESS_KEY_ID'] = data['aws_access_key_id']
+    os.environ['AWS_SECRET_ACCESS_KEY'] = data['aws_secret_access_key']
+    os.environ['AWS_SESSION_TOKEN'] = data['aws_session_token']
+    
+    return jsonify({"status": "success"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
 EOF
+
 
 #########
 
