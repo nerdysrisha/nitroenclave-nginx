@@ -17,26 +17,55 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy! PoC on Confidential Conta
 
 
 #########
-# Add the Flask credentials server script
-RUN cat > /opt/credentials_server.py << 'EOF'
+# Add the Flask credentials server script 
+RUN cat > /opt/credentials_server.py << 'EOF' && \
 from flask import Flask, request, jsonify
 import os
+import json
+
 app = Flask(__name__)
 
 @app.route('/set-credentials', methods=['POST'])
 def set_credentials():
-    data = request.get_json()
-    
-    # Set environment variables for AWS SDK
-    os.environ['AWS_ACCESS_KEY_ID'] = data['aws_access_key_id']
-    os.environ['AWS_SECRET_ACCESS_KEY'] = data['aws_secret_access_key']
-    os.environ['AWS_SESSION_TOKEN'] = data['aws_session_token']
-    
-    return jsonify({"status": "success"})
+    try:
+        # Handle both JSON and form data
+        if request.is_json:
+            data = request.get_json()
+        else:
+            # Parse raw HTTP body for VSOCK requests
+            body = request.get_data(as_text=True)
+            if body:
+                data = json.loads(body)
+            else:
+                data = request.form.to_dict()
+        
+        # Set environment variables
+        if 'AWS_ROLE_ARN' in data:
+            os.environ['AWS_ROLE_ARN'] = data['AWS_ROLE_ARN']
+        if 'AWS_WEB_IDENTITY_TOKEN_FILE' in data:
+            os.environ['AWS_WEB_IDENTITY_TOKEN_FILE'] = data['AWS_WEB_IDENTITY_TOKEN_FILE']
+        if 'AWS_REGION' in data:
+            os.environ['AWS_REGION'] = data['AWS_REGION']
+        
+        print(f"✅ Credentials received and set!")
+        print(f"AWS_ROLE_ARN: {os.environ.get('AWS_ROLE_ARN', 'Not set')}")
+        print(f"AWS_REGION: {os.environ.get('AWS_REGION', 'Not set')}")
+        
+        return jsonify({"status": "success", "message": "Credentials set successfully"})
+        
+    except Exception as e:
+        print(f"❌ Error setting credentials: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "healthy", "service": "credentials-server"})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001)
+    print("🚀 Starting Flask credentials server on port 5001...")
+    app.run(host='0.0.0.0', port=5001, debug=True)
 EOF
+
 
 
 #########
