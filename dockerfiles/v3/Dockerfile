@@ -1,18 +1,17 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2
 
-# Install packages including build tools for C compilation
+# 1. Install ALL packages first
 RUN yum update -y && \
     yum install -y nginx socat nc iproute procps-ng python3 python3-pip \
     gcc aws-nitro-enclaves-nsm-api-devel
 
-# Install Python dependencies
-RUN pip3 install cbor2
-
-# Setup nginx - create directories first
-RUN mkdir -p /usr/share/nginx/html /etc/nginx/conf.d && \
-    echo "Hello from NGINX in Enclave via VSOCK proxy! " > /usr/share/nginx/html/index.html && \
+# 2. Setup nginx IMMEDIATELY after install
+RUN echo "Hello from NGINX in Enclave via VSOCK proxy! " > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
+
+# 3. Install Python dependencies
+RUN pip3 install cbor2
 
 # Copy and compile C attestation program
 COPY attest.c /tmp/attest.c
