@@ -3,7 +3,6 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 WORKDIR /opt
 
 # --- 1. Install Dependencies ---
-# FIX 1: Added 'pkgconf-pkg-config'. This is REQUIRED for CMake to find json-c.
 RUN dnf update -y && \
     dnf install -y \
     nginx socat nc iproute procps-ng \
@@ -15,31 +14,37 @@ RUN dnf update -y && \
 # --- 2. Build Dependencies ---
 
 # A) aws-c-common
+# FIX 1: We use -DCMAKE_INSTALL_LIBDIR=lib to FORCE installation to /usr/local/lib
+# instead of /usr/local/lib64. This ensures consistency for the next step.
 RUN git clone https://github.com/awslabs/aws-c-common.git
 RUN cd aws-c-common && \
-    cmake -B build -S . -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    cmake -B build -S . \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DCMAKE_INSTALL_LIBDIR=lib && \
     cmake --build build && \
     cmake --install build
 
 # B) aws-nitro-enclaves-sdk-c
-# FIX 2: Added '-DCMAKE_PREFIX_PATH=/usr/local'. 
-# This tells CMake exactly where to find the 'AwsCFlags' and 'aws-c-common' files we just installed.
+# FIX 2: We explicitly pass the CMAKE_PREFIX_PATH to find aws-c-common.
+# FIX 3: We MANUALLY pass the json-c paths. Amazon Linux puts them in /usr/lib64, 
+# but CMake often misses that. We point directly to the .so and .h files.
 RUN git clone https://github.com/aws/aws-nitro-enclaves-sdk-c.git
 RUN cd aws-nitro-enclaves-sdk-c && \
     cmake -B build -S . \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
-        -DCMAKE_PREFIX_PATH=/usr/local && \
+        -DCMAKE_PREFIX_PATH=/usr/local \
+        -DLibJsonC_INCLUDE_DIR=/usr/include/json-c \
+        -DLibJsonC_LIBRARY=/usr/lib64/libjson-c.so && \
     cmake --build build && \
     cmake --install build
 
-# Register Lib Path
+# Register Lib Path (Use /usr/local/lib because we forced it above)
 RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/nsm.conf && ldconfig
 
 # --- 3. Compile Attestation Binary ---
 COPY attest.c /opt/attest.c
 
-# LINKING NOTE: The C SDK library is usually named 'aws-nitro-enclaves-sdk-c'.
-# We also link 'aws-c-common' and 'json-c' explicitly to be safe for static linking.
+# LINKING: We link against the SDK, common, and json-c.
 RUN gcc /opt/attest.c -o /opt/attest_c -static \
     -I/usr/local/include \
     -L/usr/local/lib \
