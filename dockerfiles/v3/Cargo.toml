@@ -1,0 +1,8 @@
+[package]
+name = "attest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+base64 = "0.21"
+aws-nitro-enclaves-nsm-api-rs = { git = "https://github.com/aws/aws-nitro-enclaves-nsm-api-rs.git" }
