@@ -1,9 +1,9 @@
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023
+FROM public.ecr.aws/amazonlinux/amazonlinux:2
 
 # Install packages including build tools for C compilation
-RUN dnf update -y && \
-    dnf install -y nginx socat nc iproute procps-ng python3 python3-pip \
-    gcc aws-nitro-enclaves-nsm-api-devel --allowerasing
+RUN yum update -y && \
+    yum install -y nginx socat nc iproute procps-ng python3 python3-pip \
+    gcc aws-nitro-enclaves-nsm-api-devel
 
 # Install Python dependencies
 RUN pip3 install cbor2
