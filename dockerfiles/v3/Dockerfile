@@ -3,25 +3,32 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 WORKDIR /opt
 
 # --- 1. Install Dependencies ---
-# Added: doxygen and graphviz (often needed for C SDK docs/builds)
+# FIX 1: Added 'pkgconf-pkg-config'. This is REQUIRED for CMake to find json-c.
 RUN dnf update -y && \
     dnf install -y \
     nginx socat nc iproute procps-ng \
     gcc cmake make git \
+    pkgconf-pkg-config \
     json-c-devel openssl-devel libcurl-devel glibc-static \
     doxygen graphviz --allowerasing
 
 # --- 2. Build Dependencies ---
 
-# A) aws-c-common (Base C lib)
+# A) aws-c-common
 RUN git clone https://github.com/awslabs/aws-c-common.git
-RUN cd aws-c-common && cmake -B build -S . && cmake --build build && cmake --install build
+RUN cd aws-c-common && \
+    cmake -B build -S . -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    cmake --build build && \
+    cmake --install build
 
-# B) aws-nitro-enclaves-sdk-c (THE CORRECT C REPO)
-# This replaces the Rust 'nsm-api' repo. This repo HAS a CMakeLists.txt.
+# B) aws-nitro-enclaves-sdk-c
+# FIX 2: Added '-DCMAKE_PREFIX_PATH=/usr/local'. 
+# This tells CMake exactly where to find the 'AwsCFlags' and 'aws-c-common' files we just installed.
 RUN git clone https://github.com/aws/aws-nitro-enclaves-sdk-c.git
 RUN cd aws-nitro-enclaves-sdk-c && \
-    cmake -B build -S . -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    cmake -B build -S . \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DCMAKE_PREFIX_PATH=/usr/local && \
     cmake --build build && \
     cmake --install build
 
@@ -31,22 +38,19 @@ RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/nsm.conf && ldconfig
 # --- 3. Compile Attestation Binary ---
 COPY attest.c /opt/attest.c
 
-# IMPORTANT: The library name for the C SDK is usually '-laws-nitro-enclaves-sdk-c' 
-# If your code specifically needs '-lnsm', you might need to create a symlink or adjust the flag.
-# For now, I'm linking against the SDK we just built.
+# LINKING NOTE: The C SDK library is usually named 'aws-nitro-enclaves-sdk-c'.
+# We also link 'aws-c-common' and 'json-c' explicitly to be safe for static linking.
 RUN gcc /opt/attest.c -o /opt/attest_c -static \
     -I/usr/local/include \
     -L/usr/local/lib \
-    -laws-nitro-enclaves-sdk-c -laws-c-common \
+    -laws-nitro-enclaves-sdk-c -laws-c-common -ljson-c \
     && chmod +x /opt/attest_c
 
 # --- 4. Setup Runtime ---
-# Nginx setup
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
-# Attestation script
 COPY get_attestation_document.sh /opt/get_attestation_document.sh
 RUN chmod +x /opt/get_attestation_document.sh
 
