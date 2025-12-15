@@ -1,9 +1,10 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
-RUN dnf update -y && dnf install -y nginx socat iproute procps-ng gcc make git openssl-devel libcurl-devel glibc-static --allowerasing
+RUN dnf update -y && dnf install -y nginx socat iproute procps-ng gcc make git cmake openssl-devel libcurl-devel glibc-static --allowerasing
 
 WORKDIR /opt
-RUN git clone https://github.com/aws/aws-nitro-enclaves-sdk-c.git && cd aws-nitro-enclaves-sdk-c && make && make install
+ 
+RUN git clone https://github.com/aws/aws-nitro-enclaves-sdk-c.git && cd aws-nitro-enclaves-sdk-c && cmake -B build -S . && cmake --build build && cmake --install build
 
 COPY attest.c /tmp/attest.c
 RUN gcc /tmp/attest.c -o /opt/attest_c -lnsm && chmod +x /opt/attest_c && rm /tmp/attest.c
