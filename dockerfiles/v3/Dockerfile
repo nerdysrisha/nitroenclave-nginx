@@ -1,17 +1,14 @@
 # ===== Rust Builder Stage =====
 FROM rust:1.77 AS builder
 
-WORKDIR /opt
-
-# Add the Rust crate dependency
-RUN cargo new attest --bin
 WORKDIR /opt/attest
 
+# Copy Rust project files
+COPY Cargo.toml .
+RUN mkdir src
 COPY attest.rs src/main.rs
 
-RUN echo 'aws-nitro-enclaves-sdk-nsm = "0.12.0"\nbase64 = "0.21"' >> Cargo.toml
-
-# Build statically linked binary for Linux
+# Build statically linked binary
 RUN cargo build --release
 
 # ===== Runtime Stage =====
@@ -19,7 +16,7 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
 RUN dnf update -y && dnf install -y nginx socat iproute procps-ng --allowerasing
 
-# Copy Rust attestation binary
+# Copy compiled Rust attestation binary
 COPY --from=builder /opt/attest/target/release/attest /opt/attest
 
 # Copy attestation script wrapper
