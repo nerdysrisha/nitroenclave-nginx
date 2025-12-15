@@ -21,7 +21,7 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
 # Create Python script to get attestation document
-RUN cat > /opt/get_attestation.py << 'EOF'
+RUN cat > /opt/get_attestation.py << 'EOFMARKER'
 #!/usr/bin/env python3
 import sys
 import json
@@ -94,7 +94,7 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-EOF
+EOFMARKER
 
 RUN chmod +x /opt/get_attestation.py
 
