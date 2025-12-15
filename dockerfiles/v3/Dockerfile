@@ -1,6 +1,6 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
-# Install dependencies
+# Install dependencies including aws-nitro-enclaves-cli for nsm-cli tool
 RUN dnf update -y && \
     dnf install -y \
     nginx \
@@ -10,6 +10,8 @@ RUN dnf update -y && \
     procps-ng \
     python3 \
     python3-pip \
+    aws-nitro-enclaves-cli \
+    vim-common \
     --allowerasing
 
 # Install Python dependencies
@@ -20,121 +22,76 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
-# Create Python script to get attestation document
-COPY <<EOFMARKER /opt/get_attestation.py
-#!/usr/bin/env python3
-import sys
-import json
-import base64
-import struct
-import os
-import traceback
+# Create shell script to get attestation using nsm-cli
+COPY <<EOFMARKER /opt/get_attestation.sh
+#!/bin/bash
 
-def get_attestation_document(nonce=None):
-    """Get attestation document from /dev/nsm"""
-    debug_info = {
-        'nsm_device_exists': os.path.exists('/dev/nsm'),
-        'nsm_device_readable': False,
-        'nsm_device_writable': False,
-        'nsm_device_perms': None,
-        'error_details': None
-    }
-    
-    try:
-        # Check permissions
-        if os.path.exists('/dev/nsm'):
-            stat_info = os.stat('/dev/nsm')
-            debug_info['nsm_device_perms'] = oct(stat_info.st_mode)
-            debug_info['nsm_device_readable'] = os.access('/dev/nsm', os.R_OK)
-            debug_info['nsm_device_writable'] = os.access('/dev/nsm', os.W_OK)
-        
-        with open('/dev/nsm', 'r+b', buffering=0) as nsm_fd:
-            # NSM request structure (simplified)
-            # Build attestation request with optional nonce
-            request = {
-                'attestation': {
-                    'nonce': nonce if nonce else None,
-                    'user_data': None,
-                    'public_key': None
-                }
-            }
-            
-            # Write request (this is simplified - actual NSM protocol is more complex)
-            # In practice, /dev/nsm handles ioctl calls
-            # We'll use a simple read which the NSM device provides
-            response = nsm_fd.read(16384)
-            
-            return response, debug_info
-    except Exception as e:
-        debug_info['error_details'] = str(e)
-        debug_info['error_traceback'] = traceback.format_exc()
-        return None, debug_info
+# Collect debug information
+DEBUG_INFO=""
 
-def main():
-    try:
-        # Read optional nonce from stdin
-        nonce_input = sys.stdin.readline().strip()
-        nonce = None
-        
-        debug_data = {
-            'nonce_received': bool(nonce_input),
-            'nonce_length': len(nonce_input) if nonce_input else 0,
-            'python_version': sys.version,
-            'working_directory': os.getcwd(),
-            'user': os.getenv('USER', 'unknown'),
-            'uid': os.getuid() if hasattr(os, 'getuid') else 'N/A'
-        }
-        
-        if nonce_input:
-            try:
-                nonce = base64.b64decode(nonce_input)
-                debug_data['nonce_decoded_length'] = len(nonce)
-            except Exception as e:
-                print(json.dumps({
-                    'status': 'error',
-                    'message': 'Invalid base64 nonce',
-                    'debug': debug_data,
-                    'decode_error': str(e)
-                }))
-                return 1
-        
-        # Get attestation document
-        doc, nsm_debug = get_attestation_document(nonce)
-        
-        # Merge debug info
-        debug_data.update(nsm_debug)
-        
-        if doc:
-            # Return as base64 JSON
-            result = {
-                'status': 'success',
-                'attestation': base64.b64encode(doc).decode('ascii'),
-                'attestation_length': len(doc),
-                'debug': debug_data
-            }
-            print(json.dumps(result))
-            return 0
-        else:
-            print(json.dumps({
-                'status': 'error',
-                'message': 'Failed to get attestation document from NSM',
-                'debug': debug_data
-            }))
-            return 1
-            
-    except Exception as e:
-        print(json.dumps({
-            'status': 'error',
-            'message': str(e),
-            'traceback': traceback.format_exc()
-        }))
-        return 1
+# Check if nsm-cli exists
+if [ -x "/usr/bin/nsm-cli" ]; then
+    NSM_CLI_EXISTS="true"
+    NSM_CLI_VERSION=\$(/usr/bin/nsm-cli --version 2>&1 || echo "version unknown")
+else
+    NSM_CLI_EXISTS="false"
+    NSM_CLI_VERSION="not found"
+fi
 
-if __name__ == '__main__':
-    sys.exit(main())
+# Check /dev/nsm
+if [ -e "/dev/nsm" ]; then
+    NSM_DEVICE_EXISTS="true"
+    NSM_DEVICE_PERMS=\$(stat -c "%a" /dev/nsm 2>/dev/null || echo "unknown")
+    NSM_DEVICE_TYPE=\$(stat -c "%F" /dev/nsm 2>/dev/null || echo "unknown")
+else
+    NSM_DEVICE_EXISTS="false"
+    NSM_DEVICE_PERMS="N/A"
+    NSM_DEVICE_TYPE="N/A"
+fi
+
+# Check if xxd is available
+XXD_AVAILABLE=\$(command -v xxd >/dev/null 2>&1 && echo "true" || echo "false")
+
+# Read nonce from stdin (base64 encoded)
+read -r NONCE_B64
+
+NONCE_RECEIVED=\$([ -n "\$NONCE_B64" ] && echo "true" || echo "false")
+NONCE_LENGTH=\${#NONCE_B64}
+
+# Get attestation document using nsm-cli
+if [ -n "\$NONCE_B64" ] && [ "\$XXD_AVAILABLE" = "true" ]; then
+    # Decode nonce from base64 to hex
+    NONCE_HEX=\$(echo "\$NONCE_B64" | base64 -d 2>/dev/null | xxd -p -c 256 2>/dev/null)
+    if [ -n "\$NONCE_HEX" ]; then
+        RESULT=\$(/usr/bin/nsm-cli attestation --nonce "\$NONCE_HEX" 2>&1)
+        NSM_EXIT_CODE=\$?
+    else
+        RESULT="Failed to decode nonce"
+        NSM_EXIT_CODE=1
+    fi
+elif [ -n "\$NONCE_B64" ] && [ "\$XXD_AVAILABLE" = "false" ]; then
+    RESULT="xxd not available for nonce conversion"
+    NSM_EXIT_CODE=1
+else
+    RESULT=\$(/usr/bin/nsm-cli attestation 2>&1)
+    NSM_EXIT_CODE=\$?
+fi
+
+# Build debug object
+DEBUG_JSON="{\\\"nsm_cli_exists\\\":\\\"\$NSM_CLI_EXISTS\\\",\\\"nsm_cli_version\\\":\\\"\$NSM_CLI_VERSION\\\",\\\"nsm_device_exists\\\":\\\"\$NSM_DEVICE_EXISTS\\\",\\\"nsm_device_perms\\\":\\\"\$NSM_DEVICE_PERMS\\\",\\\"nsm_device_type\\\":\\\"\$NSM_DEVICE_TYPE\\\",\\\"xxd_available\\\":\\\"\$XXD_AVAILABLE\\\",\\\"nonce_received\\\":\\\"\$NONCE_RECEIVED\\\",\\\"nonce_length\\\":\$NONCE_LENGTH,\\\"nsm_exit_code\\\":\$NSM_EXIT_CODE,\\\"shell\\\":\\\"\$SHELL\\\",\\\"pwd\\\":\\\"\$PWD\\\"}"
+
+# Check if nsm-cli succeeded
+if [ \$NSM_EXIT_CODE -eq 0 ] && [ -n "\$RESULT" ]; then
+    # nsm-cli outputs the attestation document in base64
+    echo "{\"status\":\"success\",\"attestation\":\"\$RESULT\",\"debug\":\$DEBUG_JSON}"
+else
+    # Escape the error message for JSON
+    RESULT_ESCAPED=\$(echo "\$RESULT" | sed 's/"/\\\\"/g' | tr '\n' ' ')
+    echo "{\"status\":\"error\",\"message\":\"nsm-cli failed\",\"details\":\"\$RESULT_ESCAPED\",\"debug\":\$DEBUG_JSON}"
+fi
 EOFMARKER
 
-RUN chmod +x /opt/get_attestation.py
+RUN chmod +x /opt/get_attestation.sh
 
 # Create startup script
 RUN printf '#!/bin/bash\n\
