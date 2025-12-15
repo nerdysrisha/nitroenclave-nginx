@@ -22,19 +22,18 @@ RUN dnf update -y && \
 # Install Python dependencies
 RUN pip3 install cbor2
 
-# Clone and build NSM library from source
+# Build NSM library from SDK-C which includes pre-built binaries
 RUN cd /tmp && \
-    git clone https://github.com/aws/aws-nitro-enclaves-nsm-api.git && \
-    cd aws-nitro-enclaves-nsm-api && \
-    cargo build --release --target-dir /tmp/nsm-build || \
-    (cd /tmp/aws-nitro-enclaves-nsm-api/nsm-lib && \
-     gcc -shared -fPIC -o libnsm.so nsm.c && \
-     cp libnsm.so /usr/lib64/ && \
-     mkdir -p /usr/include && \
-     cp nsm.h /usr/include/) && \
+    git clone https://github.com/aws/aws-nitro-enclaves-sdk-c.git && \
+    cd aws-nitro-enclaves-sdk-c && \
+    git submodule update --init --recursive && \
+    cd vendors/aws-nitro-enclaves-nsm-api/nsm-lib && \
+    make && \
+    cp include/nsm.h /usr/include/ && \
+    cp target/release/libnsm.so /usr/lib64/ && \
     ldconfig && \
     cd / && \
-    rm -rf /tmp/aws-nitro-enclaves-nsm-api /tmp/nsm-build
+    rm -rf /tmp/aws-nitro-enclaves-sdk-c
 
 # Install Python dependencies
 RUN pip3 install cbor2
