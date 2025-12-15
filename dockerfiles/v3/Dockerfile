@@ -8,8 +8,9 @@ RUN yum update -y && \
 # Install Python dependencies
 RUN pip3 install cbor2
 
-# Setup nginx
-RUN echo "Hello from NGINX in Enclave via VSOCK proxy! " > /usr/share/nginx/html/index.html && \
+# Setup nginx - create directories first
+RUN mkdir -p /usr/share/nginx/html /etc/nginx/conf.d && \
+    echo "Hello from NGINX in Enclave via VSOCK proxy! " > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
