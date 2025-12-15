@@ -1,9 +1,12 @@
+# We use a single stage as required by the enclave setup, 
+# but carefully install all build and runtime dependencies.
+
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
 WORKDIR /opt
 
 # --- 1. Install Dependencies ---
-# Combine all dependencies: Runtime (nginx, socat, etc.) and Build Tools (gcc, cmake, git)
+# Install all required tools: Runtime (nginx, socat, etc.) and Build Tools (gcc, cmake, git)
 RUN dnf update -y && \
     dnf install -y \
     nginx socat nc iproute procps-ng \
@@ -12,23 +15,24 @@ RUN dnf update -y && \
 
 # --- 2. Build NSM Dependencies ---
 # A) aws-c-common
-RUN git clone https://github.com/awslabs/aws-c-common.git && \
-    cd aws-c-common && cmake -B build -S . && cmake --build build && cmake --install build
+# Split RUN commands for greater stability during Docker layer creation
+RUN git clone https://github.com/awslabs/aws-c-common.git
+RUN cd aws-c-common && cmake -B build -S . && cmake --build build && cmake --install build
 
-# B) aws-nitro-enclaves-nsm-api (CRITICAL FIX: This was missing!)
-RUN git clone https://github.com/aws/aws-nitro-enclaves-nsm-api.git && \
-    cd aws-nitro-enclaves-nsm-api && cmake -B build -S . && cmake --build build && cmake --install build
+# B) aws-nitro-enclaves-nsm-api (Contains libnsm.so and headers)
+# FIX: Split RUN commands to prevent 'CMakeLists.txt not found' error
+RUN git clone https://github.com/aws/aws-nitro-enclaves-nsm-api.git
+RUN cd aws-nitro-enclaves-nsm-api && cmake -B build -S . && cmake --build build && cmake --install build
 
 # Register NSM library path
-# FIX: Use /usr/local/lib, which is where the previous steps installed the libraries
 RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/nsm.conf && ldconfig
 
 # --- 3. Compile Attestation Binary ---
 COPY attest.c /opt/attest.c
-# IMPROVEMENT: Use -static to minimize dependency issues in the runtime
+# IMPROVEMENT: Use -static for robust runtime execution inside the minimal enclave environment
 RUN gcc /opt/attest.c -o /opt/attest_c -static -I/usr/local/include -L/usr/local/lib -lnsm && chmod +x /opt/attest_c
 
-# --- 4. Setup Runtime ---
+# --- 4. Setup Runtime Files ---
 # Nginx setup
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
@@ -36,10 +40,10 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/
 
 # Attestation script and permissions
 COPY get_attestation_document.sh /opt/get_attestation_document.sh
-RUN chmod +x /opt/get_attestation_document.sh /opt/attest_c
+RUN chmod +x /opt/get_attestation_document.sh
 
 # --- 5. Start Script ---
-# IMPROVEMENT: Added kill handling for robustness
+# IMPROVEMENT: Added kill handling (trap) for graceful enclave termination
 RUN printf '#!/bin/bash\n\
 trap "kill -TERM 1" SIGINT SIGTERM\n\
 ip link set lo up\n\
