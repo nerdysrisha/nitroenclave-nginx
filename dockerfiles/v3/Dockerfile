@@ -9,7 +9,7 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
-COPY get_attestation_document.sh /opt/get_attestation_document.sh.sh
+COPY get_attestation_document.sh /opt/get_attestation_document.sh
 RUN chmod +x /opt/get_attestation_document.sh
 
 RUN printf '#!/bin/bash\n\nip link set lo up\n\nnginx -g "daemon off;" &\nNGINX_PID=$!\n\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nVSOCK_PID=$!\n\nsocat VSOCK-LISTEN:5001,fork EXEC:/opt/get_attestation_document.sh &\nATTEST_PID=$!\n\nwait\n' > /start.sh && \
