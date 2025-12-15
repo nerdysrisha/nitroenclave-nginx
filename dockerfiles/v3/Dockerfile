@@ -23,10 +23,6 @@ RUN gcc -o /opt/attest_c /tmp/attest.c -lnsm && \
 COPY get_attestation_document.sh /opt/get_attestation_document.sh
 RUN chmod +x /opt/get_attestation_document.sh
 
-# Keep Python version as backup (optional)
-COPY attest.py /opt/attest.py
-RUN chmod +x /opt/attest.py
-
 # Create startup script
 RUN printf '#!/bin/bash\n\nip link set lo up\n\nnginx -g "daemon off;" &\nNGINX_PID=$!\n\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nVSOCK_PID=$!\n\nsocat VSOCK-LISTEN:5001,fork EXEC:/opt/get_attestation_document.sh &\nATTEST_PID=$!\n\necho "Services started:"\necho "  - Nginx: PID $NGINX_PID"\necho "  - VSOCK proxy (5000): PID $VSOCK_PID"\necho "  - Attestation service (5001): PID $ATTEST_PID"\n\nwait\n' > /start.sh && chmod +x /start.sh
 
