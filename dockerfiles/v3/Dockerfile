@@ -27,10 +27,27 @@ import sys
 import json
 import base64
 import struct
+import os
+import traceback
 
 def get_attestation_document(nonce=None):
     """Get attestation document from /dev/nsm"""
+    debug_info = {
+        'nsm_device_exists': os.path.exists('/dev/nsm'),
+        'nsm_device_readable': False,
+        'nsm_device_writable': False,
+        'nsm_device_perms': None,
+        'error_details': None
+    }
+    
     try:
+        # Check permissions
+        if os.path.exists('/dev/nsm'):
+            stat_info = os.stat('/dev/nsm')
+            debug_info['nsm_device_perms'] = oct(stat_info.st_mode)
+            debug_info['nsm_device_readable'] = os.access('/dev/nsm', os.R_OK)
+            debug_info['nsm_device_writable'] = os.access('/dev/nsm', os.W_OK)
+        
         with open('/dev/nsm', 'r+b', buffering=0) as nsm_fd:
             # NSM request structure (simplified)
             # Build attestation request with optional nonce
@@ -47,9 +64,11 @@ def get_attestation_document(nonce=None):
             # We'll use a simple read which the NSM device provides
             response = nsm_fd.read(16384)
             
-            return response
+            return response, debug_info
     except Exception as e:
-        return None
+        debug_info['error_details'] = str(e)
+        debug_info['error_traceback'] = traceback.format_exc()
+        return None, debug_info
 
 def main():
     try:
@@ -57,38 +76,57 @@ def main():
         nonce_input = sys.stdin.readline().strip()
         nonce = None
         
+        debug_data = {
+            'nonce_received': bool(nonce_input),
+            'nonce_length': len(nonce_input) if nonce_input else 0,
+            'python_version': sys.version,
+            'working_directory': os.getcwd(),
+            'user': os.getenv('USER', 'unknown'),
+            'uid': os.getuid() if hasattr(os, 'getuid') else 'N/A'
+        }
+        
         if nonce_input:
             try:
                 nonce = base64.b64decode(nonce_input)
-            except:
+                debug_data['nonce_decoded_length'] = len(nonce)
+            except Exception as e:
                 print(json.dumps({
                     'status': 'error',
-                    'message': 'Invalid base64 nonce'
+                    'message': 'Invalid base64 nonce',
+                    'debug': debug_data,
+                    'decode_error': str(e)
                 }))
                 return 1
         
         # Get attestation document
-        doc = get_attestation_document(nonce)
+        doc, nsm_debug = get_attestation_document(nonce)
+        
+        # Merge debug info
+        debug_data.update(nsm_debug)
         
         if doc:
             # Return as base64 JSON
             result = {
                 'status': 'success',
-                'attestation': base64.b64encode(doc).decode('ascii')
+                'attestation': base64.b64encode(doc).decode('ascii'),
+                'attestation_length': len(doc),
+                'debug': debug_data
             }
             print(json.dumps(result))
             return 0
         else:
             print(json.dumps({
                 'status': 'error',
-                'message': 'Failed to get attestation document from NSM'
+                'message': 'Failed to get attestation document from NSM',
+                'debug': debug_data
             }))
             return 1
             
     except Exception as e:
         print(json.dumps({
             'status': 'error',
-            'message': str(e)
+            'message': str(e),
+            'traceback': traceback.format_exc()
         }))
         return 1
 
