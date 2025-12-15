@@ -12,8 +12,18 @@ RUN dnf update -y && \
     python3-pip \
     gcc \
     make \
-    aws-nitro-enclaves-nsm-api-devel \
+    git \
+    cmake \
     --allowerasing
+
+# Install NSM library from source
+RUN cd /tmp && \
+    git clone https://github.com/aws/aws-nitro-enclaves-nsm-api.git && \
+    cd aws-nitro-enclaves-nsm-api && \
+    make && \
+    make install && \
+    cd / && \
+    rm -rf /tmp/aws-nitro-enclaves-nsm-api
 
 # Install Python dependencies
 RUN pip3 install cbor2
