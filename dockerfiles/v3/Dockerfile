@@ -1,5 +1,7 @@
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023
+
 # Install dependencies
 RUN dnf update -y && \
     dnf install -y \
@@ -12,18 +14,27 @@ RUN dnf update -y && \
     python3-pip \
     gcc \
     make \
-    wget \
-    tar \
+    git \
+    cmake \
+    clang \
     --allowerasing
 
-# Download and install pre-built NSM library
+# Install Python dependencies
+RUN pip3 install cbor2
+
+# Clone and build NSM library from source
 RUN cd /tmp && \
-    wget https://github.com/aws/aws-nitro-enclaves-nsm-api/releases/download/v0.4.0/nsm-lib-x86_64.tar.gz && \
-    tar -xzf nsm-lib-x86_64.tar.gz && \
-    cp -r x86_64/include/* /usr/include/ && \
-    cp -r x86_64/lib/* /usr/lib64/ && \
+    git clone https://github.com/aws/aws-nitro-enclaves-nsm-api.git && \
+    cd aws-nitro-enclaves-nsm-api && \
+    cargo build --release --target-dir /tmp/nsm-build || \
+    (cd /tmp/aws-nitro-enclaves-nsm-api/nsm-lib && \
+     gcc -shared -fPIC -o libnsm.so nsm.c && \
+     cp libnsm.so /usr/lib64/ && \
+     mkdir -p /usr/include && \
+     cp nsm.h /usr/include/) && \
     ldconfig && \
-    rm -rf /tmp/*
+    cd / && \
+    rm -rf /tmp/aws-nitro-enclaves-nsm-api /tmp/nsm-build
 
 # Install Python dependencies
 RUN pip3 install cbor2
