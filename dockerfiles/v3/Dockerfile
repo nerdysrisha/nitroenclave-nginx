@@ -1,19 +1,22 @@
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
-
 RUN dnf update -y && \
     dnf install -y nginx socat nc iproute procps-ng python3 python3-pip python3-setuptools gcc make --allowerasing && \
     dnf clean all
 
+# Install Python NSM binding
 RUN pip3 install --no-cache-dir aws-nsm-interface
+
+# ✅ PATCH: Fix aws-nsm-interface to open /dev/nsm in binary mode (avoid seek error)
+RUN sed -i "s/open(NSM_DEV_FILE, 'r+')/open(NSM_DEV_FILE, 'rb+', buffering=0)/" \
+    /usr/local/lib/python3.9/site-packages/aws_nsm_interface/__init__.py
 
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
 # Attestation script (exposed via VSOCK port 5001)
-
 COPY attestation.sh /opt/attestation.sh
 RUN chmod +x /opt/attestation.sh
 
@@ -24,4 +27,3 @@ RUN nginx -t
 
 CMD ["/start.sh"]
 
- 
