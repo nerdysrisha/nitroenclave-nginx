@@ -13,11 +13,15 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
 # Attestation script (exposed via VSOCK port 5001)
+
 COPY attestation.sh /opt/attestation.sh
 RUN chmod +x /opt/attestation.sh
 
-RUN printf '#!/bin/bash\n\nset -e\nip link set lo up\n\nnginx -g "daemon off;" &\nNGINX_PID=$!\n\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nVSOCK_PID=$!\n\nsocat VSOCK-LISTEN:5001,fork EXEC:/opt/attestation.sh &\nATTEST_PID=$!\n\nwait\n' > /start.sh && \
+RUN printf '#!/bin/bash\n\nset -e\nip link set lo up\n\nnginx -g "daemon off;" &\nNGINX_PID=$!\n\nsocat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\nVSOCK_PID=$!\n\n# IMPORTANT: 2>&1 so failures are returned to the caller (no enclave console needed)\nsocat VSOCK-LISTEN:5001,fork EXEC:"/bin/bash -lc \\"/opt/attestation.sh 2>&1\\"" &\nATTEST_PID=$!\n\nwait\n' > /start.sh && \
     chmod +x /start.sh
 
-RUNRUN nginx -t
+RUN nginx -t
 
+CMD ["/start.sh"]
+
+ 
