@@ -140,16 +140,128 @@ RUN cd /tmp && \
     rm -f nsm_simple.c nsm_simple.o nsm_simple.h && \
     ldconfig
 
-# Copy and compile the C attestation program
-COPY nsm_attestation.c /opt/nsm_attestation.c
+# Create simplified attestation program
+COPY <<'EOFMARKER' /opt/nsm_attestation.c
+#include <nsm_simple.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
 
-# Modify to use our simple NSM library
-RUN sed -i 's/#include <nsm.h>/#include <nsm_simple.h>/' /opt/nsm_attestation.c && \
-    sed -i 's/nsm_lib_init()/0/g' /opt/nsm_attestation.c && \
-    sed -i 's/nsm_lib_exit()//g' /opt/nsm_attestation.c && \
-    sed -i 's/nsm_lib_nsm_process_request()/NULL/g' /opt/nsm_attestation.c && \
-    sed -i 's/nsm_lib_nsm_exit(nsm)//g' /opt/nsm_attestation.c && \
-    sed -i 's/nsm_get_attestation_doc(nsm, nonce, nonce_len, NULL, 0, NULL, 0, \&doc, \&doc_len)/nsm_get_attestation(nonce, nonce_len, \&doc, \&doc_len)/g' /opt/nsm_attestation.c
+static int base64_decode(const char *input, uint8_t **output, size_t *output_len) {
+    static const uint8_t decode_table[256] = {
+        ['A']=0,['B']=1,['C']=2,['D']=3,['E']=4,['F']=5,['G']=6,['H']=7,
+        ['I']=8,['J']=9,['K']=10,['L']=11,['M']=12,['N']=13,['O']=14,['P']=15,
+        ['Q']=16,['R']=17,['S']=18,['T']=19,['U']=20,['V']=21,['W']=22,['X']=23,
+        ['Y']=24,['Z']=25,['a']=26,['b']=27,['c']=28,['d']=29,['e']=30,['f']=31,
+        ['g']=32,['h']=33,['i']=34,['j']=35,['k']=36,['l']=37,['m']=38,['n']=39,
+        ['o']=40,['p']=41,['q']=42,['r']=43,['s']=44,['t']=45,['u']=46,['v']=47,
+        ['w']=48,['x']=49,['y']=50,['z']=51,['0']=52,['1']=53,['2']=54,['3']=55,
+        ['4']=56,['5']=57,['6']=58,['7']=59,['8']=60,['9']=61,['+']=62,['/']=63
+    };
+    
+    size_t input_len = strlen(input);
+    if (input_len == 0) return 0;
+    
+    size_t out_len = (input_len * 3) / 4;
+    uint8_t *out = malloc(out_len);
+    if (!out) return -1;
+    
+    size_t j = 0;
+    for (size_t i = 0; i < input_len; i += 4) {
+        uint32_t v = 0;
+        for (int k = 0; k < 4 && (i + k) < input_len; k++) {
+            char c = input[i + k];
+            if (c == '=') break;
+            v = (v << 6) | decode_table[(uint8_t)c];
+        }
+        if (j < out_len) out[j++] = (v >> 16) & 0xFF;
+        if (j < out_len) out[j++] = (v >> 8) & 0xFF;
+        if (j < out_len) out[j++] = v & 0xFF;
+    }
+    
+    *output = out;
+    *output_len = j;
+    return 0;
+}
+
+static void base64_encode(const uint8_t *data, uint32_t len) {
+    const char *b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    
+    for (uint32_t i = 0; i < len; i += 3) {
+        uint32_t octet_a = data[i];
+        uint32_t octet_b = (i + 1 < len) ? data[i + 1] : 0;
+        uint32_t octet_c = (i + 2 < len) ? data[i + 2] : 0;
+        uint32_t triple = (octet_a << 16) + (octet_b << 8) + octet_c;
+        
+        putchar(b64[(triple >> 18) & 0x3F]);
+        putchar(b64[(triple >> 12) & 0x3F]);
+        putchar((i + 1 < len) ? b64[(triple >> 6) & 0x3F] : '=');
+        putchar((i + 2 < len) ? b64[triple & 0x3F] : '=');
+    }
+}
+
+static void output_error(const char *stage, const char *message, int error_code) {
+    char json[2048];
+    int len = snprintf(json, sizeof(json),
+        "{\"status\":\"error\",\"stage\":\"%s\",\"message\":\"%s\",\"error_code\":%d}",
+        stage, message, error_code);
+    
+    if (len > 0 && len < sizeof(json)) {
+        printf("%s\n", json);
+    } else {
+        printf("{\"status\":\"error\",\"message\":\"JSON error\"}\n");
+    }
+}
+
+static void output_success(const uint8_t *doc, uint32_t doc_len) {
+    printf("{\"status\":\"success\",\"attestation\":\"");
+    base64_encode(doc, doc_len);
+    printf("\"}\n");
+}
+
+int main() {
+    uint8_t *doc = NULL;
+    uint32_t doc_len = 0;
+    uint8_t *nonce = NULL;
+    size_t nonce_len = 0;
+    char nonce_b64[1024] = {0};
+    
+    if (fgets(nonce_b64, sizeof(nonce_b64), stdin)) {
+        nonce_b64[strcspn(nonce_b64, "\r\n")] = 0;
+        
+        if (strlen(nonce_b64) > 0) {
+            if (base64_decode(nonce_b64, &nonce, &nonce_len) != 0) {
+                output_error("nonce_decode", "Failed to decode base64 nonce", -1);
+                return 1;
+            }
+        }
+    }
+    
+    int ret = nsm_get_attestation(nonce, nonce_len, &doc, &doc_len);
+    
+    if (ret != 0) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "NSM attestation request failed with code %d", ret);
+        output_error("attestation", msg, ret);
+        if (nonce) free(nonce);
+        return 1;
+    }
+    
+    if (!doc || doc_len == 0) {
+        output_error("attestation", "Received empty attestation document from NSM", -3);
+        if (nonce) free(nonce);
+        return 1;
+    }
+    
+    output_success(doc, doc_len);
+    
+    if (nonce) free(nonce);
+    if (doc) free(doc);
+    
+    return 0;
+}
+EOFMARKER
 
 RUN gcc -o /opt/nsm_attestation /opt/nsm_attestation.c -lnsm_simple && \
     chmod +x /opt/nsm_attestation && \
