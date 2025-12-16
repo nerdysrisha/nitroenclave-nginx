@@ -23,8 +23,8 @@ RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
 
-# Create minimal NSM C library that uses ioctl directly
-COPY <<'EOFMARKER' /tmp/nsm_simple.h
+# Create minimal NSM C library header
+RUN cat > /tmp/nsm_simple.h <<'EOF'
 #ifndef NSM_SIMPLE_H
 #define NSM_SIMPLE_H
 #include <stdint.h>
@@ -33,9 +33,10 @@ COPY <<'EOFMARKER' /tmp/nsm_simple.h
 int nsm_get_attestation(const uint8_t *nonce, size_t nonce_len, uint8_t **doc_out, uint32_t *doc_len_out);
 
 #endif
-EOFMARKER
+EOF
 
-COPY <<'EOFMARKER' /tmp/nsm_simple.c
+# Create minimal NSM C library implementation
+RUN cat > /tmp/nsm_simple.c <<'EOF'
 #include "nsm_simple.h"
 #include <fcntl.h>
 #include <unistd.h>
@@ -130,7 +131,7 @@ int nsm_get_attestation(const uint8_t *nonce, size_t nonce_len, uint8_t **doc_ou
     
     return 0;
 }
-EOFMARKER
+EOF
 
 # Compile simple NSM library
 RUN cd /tmp && \
@@ -140,8 +141,8 @@ RUN cd /tmp && \
     rm -f nsm_simple.c nsm_simple.o nsm_simple.h && \
     ldconfig
 
-# Create simplified attestation program
-COPY <<'EOFMARKER' /opt/nsm_attestation.c
+# Create simplified attestation program with fixed base64
+RUN cat > /opt/nsm_attestation.c <<'EOF'
 #include <nsm_simple.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -149,17 +150,6 @@ COPY <<'EOFMARKER' /opt/nsm_attestation.c
 #include <stdint.h>
 
 static int base64_decode(const char *input, uint8_t **output, size_t *output_len) {
-    static const uint8_t decode_table[256] = {
-        ['A']=0,['B']=1,['C']=2,['D']=3,['E']=4,['F']=5,['G']=6,['H']=7,
-        ['I']=8,['J']=9,['K']=10,['L']=11,['M']=12,['N']=13,['O']=14,['P']=15,
-        ['Q']=16,['R']=17,['S']=18,['T']=19,['U']=20,['V']=21,['W']=22,['X']=23,
-        ['Y']=24,['Z']=25,['a']=26,['b']=27,['c']=28,['d']=29,['e']=30,['f']=31,
-        ['g']=32,['h']=33,['i']=34,['j']=35,['k']=36,['l']=37,['m']=38,['n']=39,
-        ['o']=40,['p']=41,['q']=42,['r']=43,['s']=44,['t']=45,['u']=46,['v']=47,
-        ['w']=48,['x']=49,['y']=50,['z']=51,['0']=52,['1']=53,['2']=54,['3']=55,
-        ['4']=56,['5']=57,['6']=58,['7']=59,['8']=60,['9']=61,['+']=62,['/']=63
-    };
-    
     size_t input_len = strlen(input);
     if (input_len == 0) return 0;
     
@@ -170,14 +160,27 @@ static int base64_decode(const char *input, uint8_t **output, size_t *output_len
     size_t j = 0;
     for (size_t i = 0; i < input_len; i += 4) {
         uint32_t v = 0;
+        int valid_chars = 0;
+        
         for (int k = 0; k < 4 && (i + k) < input_len; k++) {
             char c = input[i + k];
             if (c == '=') break;
-            v = (v << 6) | decode_table[(uint8_t)c];
+            
+            uint8_t val = 0;
+            if (c >= 'A' && c <= 'Z') val = c - 'A';
+            else if (c >= 'a' && c <= 'z') val = c - 'a' + 26;
+            else if (c >= '0' && c <= '9') val = c - '0' + 52;
+            else if (c == '+') val = 62;
+            else if (c == '/') val = 63;
+            else continue;
+            
+            v = (v << 6) | val;
+            valid_chars++;
         }
-        if (j < out_len) out[j++] = (v >> 16) & 0xFF;
-        if (j < out_len) out[j++] = (v >> 8) & 0xFF;
-        if (j < out_len) out[j++] = v & 0xFF;
+        
+        if (valid_chars >= 2 && j < out_len) out[j++] = (v >> 16) & 0xFF;
+        if (valid_chars >= 3 && j < out_len) out[j++] = (v >> 8) & 0xFF;
+        if (valid_chars >= 4 && j < out_len) out[j++] = v & 0xFF;
     }
     
     *output = out;
@@ -261,47 +264,53 @@ int main() {
     
     return 0;
 }
-EOFMARKER
+EOF
 
 RUN gcc -o /opt/nsm_attestation /opt/nsm_attestation.c -lnsm_simple && \
     chmod +x /opt/nsm_attestation && \
     rm /opt/nsm_attestation.c
 
 # Create wrapper script for attestation
-RUN printf '#!/bin/bash\n\
-# Read nonce from stdin (optional, base64 encoded)\n\
-read -r NONCE\n\
-\n\
-# Call the C program and pass the nonce\n\
-echo "$NONCE" | /opt/nsm_attestation\n' > /opt/get_attestation_document.sh && \
-    chmod +x /opt/get_attestation_document.sh
+RUN cat > /opt/get_attestation_document.sh <<'EOF'
+#!/bin/bash
+# Read nonce from stdin (optional, base64 encoded)
+read -r NONCE
+
+# Call the C program and pass the nonce
+echo "$NONCE" | /opt/nsm_attestation
+EOF
+
+RUN chmod +x /opt/get_attestation_document.sh
 
 # Create startup script
-RUN printf '#!/bin/bash\n\
-\n\
-# Bring up loopback interface\n\
-ip link set lo up\n\
-\n\
-# Start NGINX in background\n\
-nginx -g "daemon off;" &\n\
-NGINX_PID=$!\n\
-\n\
-# VSOCK proxy for NGINX (port 5000 -> 8080)\n\
-socat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &\n\
-VSOCK_PID=$!\n\
-\n\
-# VSOCK proxy for attestation service (port 5001)\n\
-socat VSOCK-LISTEN:5001,fork EXEC:/opt/get_attestation_document.sh &\n\
-ATTEST_PID=$!\n\
-\n\
-echo "Enclave services started:"\n\
-echo "  - NGINX: PID $NGINX_PID"\n\
-echo "  - VSOCK proxy (NGINX): PID $VSOCK_PID (port 5000)"\n\
-echo "  - VSOCK attestation: PID $ATTEST_PID (port 5001)"\n\
-\n\
-# Wait for all background processes\n\
-wait\n' > /start.sh && \
-    chmod +x /start.sh
+RUN cat > /start.sh <<'EOF'
+#!/bin/bash
+
+# Bring up loopback interface
+ip link set lo up
+
+# Start NGINX in background
+nginx -g "daemon off;" &
+NGINX_PID=$!
+
+# VSOCK proxy for NGINX (port 5000 -> 8080)
+socat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &
+VSOCK_PID=$!
+
+# VSOCK proxy for attestation service (port 5001)
+socat VSOCK-LISTEN:5001,fork EXEC:/opt/get_attestation_document.sh &
+ATTEST_PID=$!
+
+echo "Enclave services started:"
+echo "  - NGINX: PID $NGINX_PID"
+echo "  - VSOCK proxy (NGINX): PID $VSOCK_PID (port 5000)"
+echo "  - VSOCK attestation: PID $ATTEST_PID (port 5001)"
+
+# Wait for all background processes
+wait
+EOF
+
+RUN chmod +x /start.sh
 
 # Verify NGINX configuration
 RUN nginx -t
