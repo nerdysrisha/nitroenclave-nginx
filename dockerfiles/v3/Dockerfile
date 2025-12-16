@@ -12,21 +12,24 @@ RUN dnf update -y && \
       python3 \
       python3-pip \
       openssl-devel \
+      curl \
+      tar \
       --allowerasing
 
-# Get and build the NSM API (C bindings)
-RUN git clone https://github.com/aws/aws-nitro-enclaves-nsm-api.git /src/nsm-api && \
-    cd /src/nsm-api && \
+# Get and build the Nitro Enclaves C SDK (includes NSM client)
+RUN git clone https://github.com/aws/aws-nitro-enclaves-sdk-c.git /src/nitro-sdk && \
+    cd /src/nitro-sdk && \
     mkdir build && cd build && \
     cmake .. && make && make install
 
-# Simple attestation tool using nsm_get_attestation_doc
+# Simple attestation tool using the SDK's NSM client
 RUN cat > /tmp/nsm_attestation.c <<'EOF'
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <nsm.h>
+
+#include <nsm.h>   // Provided by aws-nitro-enclaves-sdk-c
 
 #define NSM_MAX_ATTESTATION_DOC_SIZE (16 * 1024)
 
@@ -58,8 +61,6 @@ int main(void) {
         return 1;
     }
 
-    // Optional: could read base64 nonce from stdin and decode into nonce/user_data.
-    // Minimal version: no nonce, no user_data, no public key.
     uint8_t att_doc_buff[NSM_MAX_ATTESTATION_DOC_SIZE];
     uint32_t att_doc_size = NSM_MAX_ATTESTATION_DOC_SIZE;
 
@@ -109,7 +110,7 @@ RUN dnf update -y && \
 COPY --from=builder /tmp/nsm_attestation /opt/nsm_attestation
 RUN chmod +x /opt/nsm_attestation
 
-# Setup NGINX (same as your working config)
+# Setup NGINX (same pattern you used)
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/index.html && \
     echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
     sed -i '/listen.*80;/d' /etc/nginx/nginx.conf && \
@@ -125,7 +126,7 @@ EOF
 
 RUN chmod +x /opt/get_attestation_document.sh
 
-# Startup script (unchanged NGINX + vsock wiring)
+# Startup script: NGINX + vsock proxies
 RUN cat > /start.sh <<'EOF'
 #!/bin/bash
 set -e
