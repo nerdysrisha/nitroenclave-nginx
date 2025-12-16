@@ -1,11 +1,11 @@
 
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
+
 RUN dnf update -y && \
-    dnf install -y nginx socat nc iproute procps-ng python3 python3-pip --allowerasing && \
+    dnf install -y nginx socat nc iproute procps-ng python3 python3-pip python3-setuptools gcc make --allowerasing && \
     dnf clean all
 
-# Python NSM binding to call /dev/nsm and request attestation documents
 RUN pip3 install --no-cache-dir aws-nsm-interface
 
 RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/index.html && \
