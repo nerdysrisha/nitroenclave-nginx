@@ -1,29 +1,15 @@
-FROM public.ecr.aws/amazonlinux/amazonlinux:2023
+# Build stage - compile everything here
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS builder
 
-# Install dependencies
 RUN dnf update -y && \
     dnf install -y \
-    nginx \
-    socat \
-    nc \
-    iproute \
-    procps-ng \
-    python3 \
-    python3-pip \
     gcc \
     make \
-    vim-common \
+    python3 \
+    python3-pip \
     --allowerasing
 
-# Install Python dependencies  
-RUN pip3 install cbor2
-
-# Setup NGINX
-RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/index.html && \
-    echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
-    sed -i '/listen.*80;/d' /etc/nginx/nginx.conf
-
-# Create minimal NSM C library header
+# Create and compile NSM library
 RUN cat > /tmp/nsm_simple.h <<'EOF'
 #ifndef NSM_SIMPLE_H
 #define NSM_SIMPLE_H
@@ -35,7 +21,6 @@ int nsm_get_attestation(const uint8_t *nonce, size_t nonce_len, uint8_t **doc_ou
 #endif
 EOF
 
-# Create minimal NSM C library implementation
 RUN cat > /tmp/nsm_simple.c <<'EOF'
 #include "nsm_simple.h"
 #include <fcntl.h>
@@ -57,26 +42,19 @@ struct nsm_raw {
     uint32_t response_len;
 };
 
-// Minimal CBOR encoding for attestation request
 static int build_attestation_request(const uint8_t *nonce, size_t nonce_len, uint8_t *out, size_t *out_len) {
     size_t idx = 0;
-    
-    // CBOR map with 1 key
     out[idx++] = 0xA1;
-    
-    // Key: "Attestation" (text string, length 11)
     out[idx++] = 0x6B;
     memcpy(&out[idx], "Attestation", 11);
     idx += 11;
     
-    // Value: map with nonce
     if (nonce && nonce_len > 0) {
-        out[idx++] = 0xA1; // map with 1 entry
-        out[idx++] = 0x65; // "nonce" (5 chars)
+        out[idx++] = 0xA1;
+        out[idx++] = 0x65;
         memcpy(&out[idx], "nonce", 5);
         idx += 5;
         
-        // nonce as byte string
         if (nonce_len < 24) {
             out[idx++] = 0x40 | nonce_len;
         } else if (nonce_len < 256) {
@@ -88,7 +66,7 @@ static int build_attestation_request(const uint8_t *nonce, size_t nonce_len, uin
         memcpy(&out[idx], nonce, nonce_len);
         idx += nonce_len;
     } else {
-        out[idx++] = 0xA0; // empty map
+        out[idx++] = 0xA0;
     }
     
     *out_len = idx;
@@ -97,13 +75,9 @@ static int build_attestation_request(const uint8_t *nonce, size_t nonce_len, uin
 
 int nsm_get_attestation(const uint8_t *nonce, size_t nonce_len, uint8_t **doc_out, uint32_t *doc_len_out) {
     int fd = open("/dev/nsm", O_RDWR);
-    if (fd < 0) {
-        return -1;
-    }
+    if (fd < 0) return -1;
     
     struct nsm_raw nsm_raw = {0};
-    
-    // Build CBOR request
     size_t req_len;
     if (build_attestation_request(nonce, nonce_len, nsm_raw.request, &req_len) != 0) {
         close(fd);
@@ -112,19 +86,13 @@ int nsm_get_attestation(const uint8_t *nonce, size_t nonce_len, uint8_t **doc_ou
     nsm_raw.request_len = req_len;
     nsm_raw.response_len = NSM_RESPONSE_MAX_SIZE;
     
-    // Make ioctl call
     int ret = ioctl(fd, NSM_IO_REQUEST, &nsm_raw);
     close(fd);
     
-    if (ret != 0 || nsm_raw.response_len == 0) {
-        return -3;
-    }
+    if (ret != 0 || nsm_raw.response_len == 0) return -3;
     
-    // Allocate and copy response
     *doc_out = malloc(nsm_raw.response_len);
-    if (!*doc_out) {
-        return -4;
-    }
+    if (!*doc_out) return -4;
     
     memcpy(*doc_out, nsm_raw.response, nsm_raw.response_len);
     *doc_len_out = nsm_raw.response_len;
@@ -133,16 +101,13 @@ int nsm_get_attestation(const uint8_t *nonce, size_t nonce_len, uint8_t **doc_ou
 }
 EOF
 
-# Compile simple NSM library
+# Compile NSM library
 RUN cd /tmp && \
     gcc -c -fPIC nsm_simple.c -o nsm_simple.o && \
-    gcc -shared -o /usr/lib64/libnsm_simple.so nsm_simple.o && \
-    cp nsm_simple.h /usr/include/ && \
-    rm -f nsm_simple.c nsm_simple.o nsm_simple.h && \
-    ldconfig
+    gcc -shared -o libnsm_simple.so nsm_simple.o
 
-# Create simplified attestation program with fixed base64
-RUN cat > /opt/nsm_attestation.c <<'EOF'
+# Create attestation program
+RUN cat > /tmp/nsm_attestation.c <<'EOF'
 #include <nsm_simple.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -205,16 +170,8 @@ static void base64_encode(const uint8_t *data, uint32_t len) {
 }
 
 static void output_error(const char *stage, const char *message, int error_code) {
-    char json[2048];
-    int len = snprintf(json, sizeof(json),
-        "{\"status\":\"error\",\"stage\":\"%s\",\"message\":\"%s\",\"error_code\":%d}",
-        stage, message, error_code);
-    
-    if (len > 0 && len < sizeof(json)) {
-        printf("%s\n", json);
-    } else {
-        printf("{\"status\":\"error\",\"message\":\"JSON error\"}\n");
-    }
+    fprintf(stdout, "{\"status\":\"error\",\"stage\":\"%s\",\"message\":\"%s\",\"error_code\":%d}\n",
+            stage, message, error_code);
 }
 
 static void output_success(const uint8_t *doc, uint32_t doc_len) {
@@ -244,9 +201,7 @@ int main() {
     int ret = nsm_get_attestation(nonce, nonce_len, &doc, &doc_len);
     
     if (ret != 0) {
-        char msg[256];
-        snprintf(msg, sizeof(msg), "NSM attestation request failed with code %d", ret);
-        output_error("attestation", msg, ret);
+        output_error("attestation", "NSM attestation request failed", ret);
         if (nonce) free(nonce);
         return 1;
     }
@@ -266,17 +221,38 @@ int main() {
 }
 EOF
 
-RUN gcc -o /opt/nsm_attestation /opt/nsm_attestation.c -lnsm_simple && \
-    chmod +x /opt/nsm_attestation && \
-    rm /opt/nsm_attestation.c
+# Compile attestation program (statically link the NSM library)
+RUN gcc -o /tmp/nsm_attestation /tmp/nsm_attestation.c -I/tmp -L/tmp -lnsm_simple -static-libgcc
 
-# Create wrapper script for attestation
+# Runtime stage - minimal image with only what's needed
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023
+
+# Install only runtime dependencies (no build tools!)
+RUN dnf update -y && \
+    dnf install -y \
+    nginx \
+    socat \
+    iproute \
+    --allowerasing && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf
+
+# Copy compiled binaries from builder
+COPY --from=builder /tmp/libnsm_simple.so /usr/lib64/
+COPY --from=builder /tmp/nsm_attestation /opt/nsm_attestation
+
+RUN ldconfig && chmod +x /opt/nsm_attestation
+
+# Setup NGINX
+RUN echo "Hello from NGINX in Enclave via VSOCK proxy!" > /usr/share/nginx/html/index.html && \
+    echo 'server { listen 8080; location / { root /usr/share/nginx/html; }}' > /etc/nginx/conf.d/default.conf && \
+    sed -i '/listen.*80;/d' /etc/nginx/nginx.conf && \
+    nginx -t
+
+# Create wrapper script
 RUN cat > /opt/get_attestation_document.sh <<'EOF'
 #!/bin/bash
-# Read nonce from stdin (optional, base64 encoded)
 read -r NONCE
-
-# Call the C program and pass the nonce
 echo "$NONCE" | /opt/nsm_attestation
 EOF
 
@@ -285,34 +261,20 @@ RUN chmod +x /opt/get_attestation_document.sh
 # Create startup script
 RUN cat > /start.sh <<'EOF'
 #!/bin/bash
-
-# Bring up loopback interface
 ip link set lo up
-
-# Start NGINX in background
 nginx -g "daemon off;" &
 NGINX_PID=$!
-
-# VSOCK proxy for NGINX (port 5000 -> 8080)
 socat VSOCK-LISTEN:5000,fork TCP:0.0.0.0:8080 &
 VSOCK_PID=$!
-
-# VSOCK proxy for attestation service (port 5001)
 socat VSOCK-LISTEN:5001,fork EXEC:/opt/get_attestation_document.sh &
 ATTEST_PID=$!
-
 echo "Enclave services started:"
 echo "  - NGINX: PID $NGINX_PID"
 echo "  - VSOCK proxy (NGINX): PID $VSOCK_PID (port 5000)"
 echo "  - VSOCK attestation: PID $ATTEST_PID (port 5001)"
-
-# Wait for all background processes
 wait
 EOF
 
 RUN chmod +x /start.sh
-
-# Verify NGINX configuration
-RUN nginx -t
 
 CMD ["/start.sh"]
