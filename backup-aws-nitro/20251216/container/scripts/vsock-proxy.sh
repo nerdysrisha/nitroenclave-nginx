@@ -1,9 +1,0 @@
-#!/bin/bash
-
-ENCLAVE_CID=$1
-TCP_PORT=${2:-80}
-VSOCK_PORT=${3:-5000}
-
-echo "Starting VSOCK proxy: TCP:$TCP_PORT -> VSOCK:$ENCLAVE_CID:$VSOCK_PORT"
-
-exec socat TCP-LISTEN:$TCP_PORT,fork,reuseaddr VSOCK-CONNECT:$ENCLAVE_CID:$VSOCK_PORT
