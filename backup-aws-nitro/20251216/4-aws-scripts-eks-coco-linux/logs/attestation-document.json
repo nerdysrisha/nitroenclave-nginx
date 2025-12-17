@@ -1,0 +1,89 @@
+bash-4.2# echo -n "test-nonce-12345" | base64 | socat - VSOCK-CONNECT:${CID}:5001
+{
+	"ok": true,
+	"stage": "done",
+	"time_utc": "2025-12-16T18:19:21Z",
+	"nonce": {
+		"present": true,
+		"len": 24,
+		"preview_b64_first32": "ZEdWemRDMXViMjVqWlMweE1qTTBOUT09"
+	},
+	"env": {
+		"python": "3.9.25 (main, Nov 12 2025, 00:00:00)  [GCC 11.5.0 20240719 (Red Hat 11.5.0-5)]",
+		"platform": "Linux-4.14.256-209.484.amzn2.x86_64-x86_64-with-glibc2.34",
+		"uname": "Linux (none) 4.14.256-209.484.amzn2.x86_64 #1 SMP Tue Jan 11 21:47:36 UTC 2022 x86_64 x86_64",
+		"uid_gid": "0:0"
+	},
+	"checks": {
+		"dev_nsm_exists": true,
+		"dev_nsm_is_char": true,
+		"dev_nsm_stat": {
+			"rc": 0,
+			"stdout": "  File: /dev/nsm\n  Size: 0         \tBlocks: 0          IO Block: 4096   character special file\nDevice: 6h/6d\tInode: 18649       Links: 1     Device type: a,93\nAccess: (0666/crw-rw-rw-)  Uid: (    0/    root)   Gid: (    0/    root)\nAccess: 2025-12-16 18:18:53.373204735 +0000\nModify: 2025-12-16 18:18:53.373204735 +0000\nChange: 2025-12-16 18:18:53.373204735 +0000\n Birth: -\n",
+			"stderr": ""
+		},
+		"dev_nsm_ls": {
+			"rc": 0,
+			"stdout": "crw-rw-rw- 1 root root 10, 147 Dec 16 18:18 /dev/nsm\n",
+			"stderr": ""
+		},
+		"id": {
+			"rc": 0,
+			"stdout": "uid=0(root) gid=0(root) groups=0(root)\n",
+			"stderr": ""
+		},
+		"mount": {
+			"rc": 0,
+			"stdout": "rootfs on / type rootfs (rw,size=785088k,nr_inodes=196272)\ndev on /dev type devtmpfs (rw,nosuid,noexec,relatime,size=785104k,nr_inodes=196276,mode=755)\nproc on /proc type proc (rw,nosuid,nodev,noexec,relatime)\ntmpfs on /run type tmpfs (rw,nosuid,nodev,noexec,relatime,mode=755)\ntmpfs on /tmp type tmpfs (rw,nosuid,nodev,noexec,relatime)\nshm on /dev/shm type tmpfs (rw,nosuid,nodev,noexec,relatime)\ndevpts on /dev/pts type devpts (rw,nosuid,noexec,relatime,mode=600,ptmxmode=000)\nsysfs on /sys type sysfs (rw,nosuid,nodev,noexec,relatime)\ncgroup_root on /sys/fs/cgroup type tmpfs (rw,nosuid,nodev,noexec,relatime,mode=755)\ncpuset on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,cpuset)\ncpu on /sys/fs/cgroup/cpu type cgroup (rw,nosuid,nodev,noexec,relatime,cpu)\ncpuacct on /sys/fs/cgroup/cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,cpuacct)\nblkio on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,blkio)\nmemory on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,memory)\ndevices on /sys/fs/cgroup/devices type cgroup (rw,nosuid,nodev,noexec,relatime,devices)\nfreezer on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,freezer)\nnet_cls on /sys/fs/cgroup/net_cls type cgroup (rw,nosuid,nodev,noexec,relatime,net_cls)\nperf_event on /sys/fs/cgroup/perf_event type cgroup (rw,nosuid,nodev,noexec,relatime,perf_event)\nnet_prio on /sys/fs/cgroup/net_prio type cgroup (rw,nosuid,nodev,noexec,relatime,net_prio)\nhugetlb on /sys/fs/cgroup/hugetlb type cgroup (rw,nosuid,nodev,noexec,relatime,hugetlb)\npids on /sys/fs/cgroup/pids type cgroup (rw,nosuid,nodev,noexec,relatime,pids)\n",
+			"stderr": ""
+		},
+		"cmdline": {
+			"rc": 0,
+			"stdout": "reboot=k panic=30 pci=off nomodules console=ttyS0 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd random.trust_cpu=on virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6\n",
+			"stderr": ""
+		},
+		"dmesg_tail": {
+			"rc": 0,
+			"stdout": "[Tue Dec 16 18:18:52 2025] Linux version 4.14.256-209.484.amzn2.x86_64 (mockbuild@ip-10-0-50-84) (gcc version 7.3.1 20180712 (Red Hat 7.3.1-13) (GCC)) #1 SMP Tue Jan 11 21:47:36 UTC 2022\n[Tue Dec 16 18:18:52 2025] Command line: reboot=k panic=30 pci=off nomodules console=ttyS0 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd random.trust_cpu=on virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x002: 'SSE registers'\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x004: 'AVX registers'\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x008: 'MPX bounds registers'\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x010: 'MPX CSR'\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x020: 'AVX-512 opmask'\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x040: 'AVX-512 Hi256'\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x080: 'AVX-512 ZMM_Hi256'\n[Tue Dec 16 18:18:52 2025] x86/fpu: Supporting XSAVE feature 0x200: 'Protection Keys User registers'\n[Tue Dec 16 18:18:52 2025] x86/fpu: xstate_offset[2]:  576, xstate_sizes[2]:  256\n[Tue Dec 16 18:18:52 2025] x86/fpu: xstate_offset[3]:  832, xstate_sizes[3]:   64\n[Tue Dec 16 18:18:52 2025] x86/fpu: xstate_offset[4]:  896, xstate_sizes[4]:   64\n[Tue Dec 16 18:18:52 2025] x86/fpu: xstate_offset[5]:  960, xstate_sizes[5]:   64\n[Tue Dec 16 18:18:52 2025] x86/fpu: xstate_offset[6]: 1024, xstate_sizes[6]:  512\n[Tue Dec 16 18:18:52 2025] x86/fpu: xstate_offset[7]: 1536, xstate_sizes[7]: 1024\n[Tue Dec 16 18:18:52 2025] x86/fpu: xstate_offset[9]: 2560, xstate_sizes[9]:    8\n[Tue Dec 16 18:18:52 2025] x86/fpu: Enabled xstate features 0x2ff, context size is 2568 bytes, using 'compacted' format.\n[Tue Dec 16 18:18:52 2025] e820: BIOS-provided physical RAM map:\n[Tue Dec 16 18:18:52 2025] BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable\n[Tue Dec 16 18:18:52 2025] BIOS-e820: [mem 0x0000000000100000-0x000000007f7ffffe] usable\n[Tue Dec 16 18:18:52 2025] NX (Execute Disable) protection: active\n[Tue Dec 16 18:18:52 2025] DMI not present or invalid.\n[Tue Dec 16 18:18:52 2025] Hypervisor detected: KVM\n[Tue Dec 16 18:18:52 2025] tsc: Fast TSC calibration using PIT\n[Tue Dec 16 18:18:52 2025] e820: update [mem 0x00000000-0x00000fff] usable ==> reserved\n[Tue Dec 16 18:18:52 2025] e820: remove [mem 0x000a0000-0x000fffff] usable\n[Tue Dec 16 18:18:52 2025] e820: last_pfn = 0x7f7ff max_arch_pfn = 0x400000000\n[Tue Dec 16 18:18:52 2025] MTRR default type: uncachable\n[Tue Dec 16 18:18:52 2025] MTRR fixed ranges disabled:\n[Tue Dec 16 18:18:52 2025]   00000-FFFFF uncachable\n[Tue Dec 16 18:18:52 2025] MTRR variable ranges disabled:\n[Tue Dec 16 18:18:52 2025]   0 disabled\n[Tue Dec 16 18:18:52 2025]   1 disabled\n[Tue Dec 16 18:18:52 2025]   2 disabled\n[Tue Dec 16 18:18:52 2025]   3 disabled\n[Tue Dec 16 18:18:52 2025]   4 disabled\n[Tue Dec 16 18:18:52 2025]   5 disabled\n[Tue Dec 16 18:18:52 2025]   6 disabled\n[Tue Dec 16 18:18:52 2025]   7 disabled\n[Tue Dec 16 18:18:52 2025] MTRR: Disabled\n[Tue Dec 16 18:18:52 2025] x86/PAT: MTRRs disabled, skipping PAT initialization too.\n[Tue Dec 16 18:18:52 2025] CPU MTRRs all blank - virtualized system.\n[Tue Dec 16 18:18:52 2025] x86/PAT: Configuration [0-7]: WB  WT  UC- UC  WB  WT  UC- UC  \n[Tue Dec 16 18:18:52 2025] found SMP MP-table at [mem 0x0009fc00-0x0009fc0f]\n[Tue Dec 16 18:18:52 2025] Scanning 1 areas for low memory corruption\n[Tue Dec 16 18:18:52 2025] Base memory trampoline at [ffff888000099000] 99000 size 24576\n[Tue Dec 16 18:18:52 2025] Using GB pages for direct mapping\n[Tue Dec 16 18:18:52 2025] RAMDISK: [mem 0x02e2f000-0x1f4bafff]\n[Tue Dec 16 18:18:52 2025] ACPI: Early table checksum verification disabled\n[Tue Dec 16 18:18:52 2025] ACPI BIOS Error (bug): A valid RSDP was not found (20170728/tbxfroot-244)\n[Tue ",
+			"stderr": ""
+		},
+		"aws_nsm_interface_import": true,
+		"aws_nsm_interface_version": "unknown",
+		"open_nsm_device": true,
+		"close_nsm_device": true
+	},
+	"nsm": {
+		"describe": {
+			"digest": "SHA384",
+			"max_pcrs": 32,
+			"module_id": "i-0ef2cc6cff38e6d9f-enc019b2862d7103061",
+			"locked_pcrs": [
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15
+			],
+			"version_major": 1,
+			"version_minor": 0,
+			"version_patch": 0
+		}
+	},
+	"attestation": {
+		"size_bytes": 4485,
+		"sha256": "f6d76709f739aa35203d22660007fd86186a8530a87e4e6af8b65b5d4ef8ef3f",
+		"document_b64": "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"
+	},
+	"errors": []
+}

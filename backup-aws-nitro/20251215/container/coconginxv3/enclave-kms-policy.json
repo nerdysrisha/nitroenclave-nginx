@@ -1,0 +1,35 @@
+{
+  "Version": "2012-10-17",
+  "Id": "key-configured-for-enclave",
+  "Statement": [
+    {
+      "Sid": "Enable IAM User Permissions",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::908774804544:root"
+      },
+      "Action": [
+        "kms:Decrypt",
+        "kms:PutKeyPolicy",
+        "kms:GetKeyPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "Enable enclave decrypt",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::908774804544:root"
+      },
+      "Action": "kms:Decrypt",
+      "Resource": "*",
+      "Condition": {
+        "StringEqualsIgnoreCase": {
+          "kms:RecipientAttestation:PCR0": "062b9d5dbce698b68f4d83c427bf91aaf393621e559ee55921e596c262c3e298729fe5cdadfa76ec4631314dc2e46958",
+          "kms:RecipientAttestation:PCR1": "0343b056cd8485ca7890ddd833476d78460aed2aa161548e4e26bedf321726696257d623e8805f3f605946b3d8b0c6aa",
+          "kms:RecipientAttestation:PCR2": "5ccd0c8e0dba5bd710c25ae4ba82dea77a90ea77d2b7c650e3e49c29fef3f9a3d2591e0f20aff0f31cfbcb88daae8d12"
+        }
+      }
+    }
+  ]
+}

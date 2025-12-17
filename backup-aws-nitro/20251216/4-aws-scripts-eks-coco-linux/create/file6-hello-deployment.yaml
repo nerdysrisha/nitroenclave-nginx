@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-enclave-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-enclave
+  template:
+    metadata:
+      labels:
+        app: hello-enclave
+    spec:
+      containers:
+      - name: hello-container
+        image: nerdysrisha/hello-aws-nitro:latest
+        resources:
+          limits:
+            aws.ec2.nitro/nitro_enclaves: "1"
+            hugepages-2Mi: 768Mi
+            cpu: 250m
+          requests:
+            aws.ec2.nitro/nitro_enclaves: "1"
+            hugepages-2Mi: 768Mi
+        volumeMounts:
+        - mountPath: /dev/hugepages
+          name: hugepage
+          readOnly: false
+      volumes:
+      - name: hugepage
+        emptyDir:
+          medium: HugePages-2Mi
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
